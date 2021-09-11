@@ -1,0 +1,245 @@
+# A slightly more involved example Abominable script.
+# (Please look at demo1.txt first.)
+
+# This script creates a drum track for a song called "The Golden Road," by
+# David Bulger (the Abominable originator). You can find the song at
+# https://www.youtube.com/watch?v=pq9Y4TQswVU.
+
+# Add a bit of randomness to the timing and volume of each hit, so it doesn't
+# sound so mechanical. If omitted, these default to zero. Recall, the "=" sign
+# is optional.
+randvol 0.4  #  standard deviation of volume, in dB
+randtime = 0.004  #  standard deviation of note timing, in seconds
+
+# Define the drum sounds.
+# There's one line below per tablature line, in the same order. Each sound is
+# defined by either loading a sound file or using a built-in synth drum. Each
+# built-in synth drum requires a few parameters. The first parameter will
+# always be the duration: a bare number counts tablature columns, or
+# alternatively you can specify the length in seconds by appending an 's'. In
+# comments below, 'tc' refers to tab columns (sixteenth-notes, in this
+# example).
+tablines =
+sticks 1
+crash 16 205
+ride 8
+hihat 0.5 closed 1300
+hihat 4 open 1300
+snare 4
+tom 4 210
+tom 4 180
+tom 4 150
+bass 2
+
+# The above blank line tells Abominable that the list of 'drums' is complete.
+# It now knows how many sounds there are, and will expect that many lines of
+# tablature in each snippet.
+
+# Note also that each of the synthesised sounds will take a short while to
+# generate, the first time it's created, but it will be stored in the
+# "soundfolder" for instant retrieval next time. It needs to be generated
+# fresh for each different tempo, and in particular, the 'relative duration'
+# sounds (i.e., the ones whose durations are specified in tab columns rather
+# than in seconds) will need to be generated repeatedly if they appear at
+# multiple tempos in the sequences below.
+
+# Now we define the basic building blocks using tablature. They don't have to
+# be exactly one bar each, though that's often easiest. The first block is
+# assigned the name 'barV1'. Each hit is represented by a digit from 1 to 9 to
+# indicate relative loudness. Again the "=" is optional, and the barline is
+# also optional.
+
+tab countin =
+7---6---7---6---|  #  sticks
+----------------|  #  crash
+----------------|  #  ride
+----------------|  #  hihat
+----------------|  #  hihat
+----------------|  #  snare
+----------------|  #  tom
+----------------|  #  tom
+----------------|  #  tom
+----------------|  #  bass
+
+tab introB1 = 
+----------------|  #  sticks
+----------------|  #  crash
+----------------|  #  ride
+--4-6-4-6-4-6-4-|  #  hihat
+6---------------|  #  hihat
+----------------|  #  snare
+----------------|  #  tom
+----------------|  #  tom
+----------------|  #  tom
+----------------|  #  bass
+
+tab introB2 = 
+----------------|  #  sticks
+----------------|  #  crash
+----------------|  #  ride
+6-4-6-4-6-4-6-4-|  #  hihat
+----------------|  #  hihat
+----------------|  #  snare
+----------------|  #  tom
+----------------|  #  tom
+----------------|  #  tom
+----------------|  #  bass
+
+# Once you've created some tab fragments, you can combine them into longer
+# sequences. (Actually the objects you create with the "tab" and "sequence"
+# commands are equivalent; they just use different input formats.) A blank line# ends each sequece definition. You can use e.g. "x3" to indicate repetition,
+# and parentheses for grouping if you want to repeat a sequence. Line breaks
+# are ignored.
+
+sequence intro = (introB1 introB2) x4
+
+tab verseB1 =
+----------------|  #  sticks
+8---------------|  #  crash
+4---2-3-4---2-4-|  #  ride
+----------------|  #  hihat
+----------------|  #  hihat
+--------------8-|  #  snare
+----------------|  #  tom
+----------------|  #  tom
+----------------|  #  tom
+9---------------|  #  bass
+
+tab verseB2 =
+----------------|  #  sticks
+----------------|  #  crash
+--4---2-4-2---2-|  #  ride
+----------------|  #  hihat
+----------------|  #  hihat
+------8---------|  #  snare
+------------8---|  #  tom
+--------------8-|  #  tom
+----------------|  #  tom
+----------------|  #  bass
+
+tab verseB3 =
+----------------|  #  sticks
+----------------|  #  crash
+4---2-3-4---2-4-|  #  ride
+----------------|  #  hihat
+----------------|  #  hihat
+--------------8-|  #  snare
+----------------|  #  tom
+----------------|  #  tom
+----------------|  #  tom
+9---------------|  #  bass
+
+tab verseB4 =
+----------------|  #  sticks
+----------------|  #  crash
+--4---2-4-2---2-|  #  ride
+----------------|  #  hihat
+----------------|  #  hihat
+--8---4-8-4-----|  #  snare
+------------8---|  #  tom
+--------------8-|  #  tom
+----------------|  #  tom
+----------------|  #  bass
+
+tab verseB13 =
+----------------|  #  sticks
+8---------------|  #  crash
+----------------|  #  ride
+----------------|  #  hihat
+----------------|  #  hihat
+------------5-8-|  #  snare
+----------------|  #  tom
+----------------|  #  tom
+----------------|  #  tom
+9---------------|  #  bass
+
+tab verseB14 =
+----------------|  #  sticks
+----------------|  #  crash
+----------------|  #  ride
+----------------|  #  hihat
+----------------|  #  hihat
+------8---------|  #  snare
+------------8---|  #  tom
+--------------8-|  #  tom
+----------------|  #  tom
+----------------|  #  bass
+
+tab verseB15 =
+----------------|  #  sticks
+----------------|  #  crash
+----------------|  #  ride
+----------------|  #  hihat
+6---6-----------|  #  hihat
+8---8-----------|  #  snare
+--------8-4-4---|  #  tom
+--------------8-|  #  tom
+----------------|  #  tom
+9---------------|  #  bass
+
+tab verseB16 =
+----------------|  #  sticks
+----------------|  #  crash
+----------------|  #  ride
+----------------|  #  hihat
+--------6---6---|  #  hihat
+--------8---8---|  #  snare
+----------------|  #  tom
+--4-------------|  #  tom
+----8-----------|  #  tom
+----------------|  #  bass
+
+sequence verse =
+(verseB1 verseB2 verseB3 verseB4) x3 verseB13 verseB14 verseB15 verseB16
+
+tab cadence =
+-  #  sticks
+8  #  crash
+4  #  ride
+-  #  hihat
+-  #  hihat
+-  #  snare
+-  #  tom
+-  #  tom
+-  #  tom
+9  #  bass
+
+sequence finalverse =
+(verseB1 verseB2 verseB3 verseB4) x3 verseB13 verseB14
+tempo 510 verseB15 tempo 450 verseB16 cadence
+
+tab bridgeB1 =
+6--6--6--6--6-6-|  #  sticks
+8---------------|  #  crash
+6446446446446464|  #  ride
+----------------|  #  hihat
+----------------|  #  hihat
+8--4--6--4--8-8-|  #  snare
+----------------|  #  tom
+----------------|  #  tom
+----------------|  #  tom
+9---------------|  #  bass
+
+tab bridgeB2 =
+6--6--6--6--6-6-|  #  sticks
+----------------|  #  crash
+6446446446446464|  #  ride
+----------------|  #  hihat
+----------------|  #  hihat
+8--4--6--4------|  #  snare
+----------8-----|  #  tom
+-----------4----|  #  tom
+------------8-8-|  #  tom
+9---------------|  #  bass
+
+sequence bridge =
+tempo 324 (bridgeB1 bridgeB2) x5 tempo 540 verseB1 verseB2 verseB15 verseB16
+
+sequence wholetune =
+tempo 540 countin intro verse x3 intro bridge finalverse
+
+# Now you can export the tune, in two formats. This creates a .wav file:
+export wholetune GoldenRoad.wav
+
+# And this creates a text file with 84 columns per line (probably less useful):
+# export wholetune GoldenRoad.txt 84  #  uncomment and run to view the file!

@@ -1,0 +1,28 @@
+# Short example script for Abominable.
+# Intro drum riff from Toto's Rosanna.
+
+# Note that everything following the symbol '#' is a 'comment.' It is ignored
+# by Abominable, but you can use it to help keep track of what things mean.
+
+# Firstly, list the instruments to be used:
+tablines =
+hihat 0.04s      #  built-in hihat, duration = 0.2 seconds
+snare 3          #  built-in snare, duration = 3 tablature columns
+bass 3           #  built-in bass, duration = 3 tablature columns
+
+tab intro =
+2-22-22-22-2|2-22-22-22-2|2-22-22-22-2|2-22-22-22-2|2-22-22-22-2|2-22-22-22-2|2-22-22-22-2|2-22-22-22-2|
+------5-----|------5---1-|------5-----|------5---1-|------5-----|------5---1-|------5-----|------5---1-|
+5----5---5--|--5--------5|5----5---5--|--5--------5|5----5---5--|--5--------5|5----5---5--|--5--------5|
+
+# Now we set the tempo. This is not exactly "beats per minute." It's tablature columns per minute. In
+# this tune, we have 4 beats per bar, but 12 tablature columns per bar. So we have to triple the bmp to
+# get the tempo.
+
+# Also note that the barline symbols, "|", are ignored by Abominable, but make it easier to keep track
+# of beat counts.
+
+tempo 514
+
+# Now you can export the audio as a .wav file:
+export intro RosannaShuffle.wav
