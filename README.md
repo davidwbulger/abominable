@@ -13,10 +13,10 @@ This project is very new. If it's of interest to anyone else, I'm planning to tu
 
 The two main functionalities that Abominable offers are
 
-* converting drum tablature to audio, and
+* converting drum tablature to audio (.wav or .mid), and
 * synthesising drum sounds.
 
-These are independent, in the sense that if you'd prefer to use sampled drum-hits, you can do that too. In fact, there are three kinds of drum sounds you can use:
+These are independent, in the sense that if you'd prefer to use sampled drum-hits, you can do that too. In fact, there are three kinds of drum sounds you can use (in addition to whatever MIDI hardware or software you have):
 
 * pre-sampled audio,
 * built-in standard drums ("tom", "crash" et cetera),
@@ -37,6 +37,10 @@ This slightly more involved example also shows how you can define sections, and 
 This example demonstrates how to extend Abominable's built-in drum kit by defining a new drum of your own. (This is considered advanced usage; most users might never want to do it.) In order to do that, you need to write a little bit of Python code, and therefore, this demo works a little differently: note that the file has a `.py` extension, and you run it by typing `python demo3.py` at the system command prompt.
 
 As illustrated in `demo3.py`, you create a new drum by defining a function that returns a Python dictionary, and then you make it available by adding it to Abominable's drum collection in `drum\_dict`. The dictionary that your drum function returns should specify some or all of the parameters of Abominable's quite general function `note` (search for `def note` in `Abominable.py` to see these parameters).
+
+### `demo4.txt`
+
+This is essentially a repeat of `demo1.txt`, but for MIDI export instead of .wav.
 
 ## Synthesis quality
 
