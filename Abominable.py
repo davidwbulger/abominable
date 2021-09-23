@@ -20,7 +20,7 @@ class Drum:
     # tempos.
     rvol = re.compile("^vol[+-]")
 
-    def __init__(self, input, user_defined_drums, sound_folder, fs):
+    def __init__(self, input, sound_folder, fs):
         self.sound_folder = sound_folder
         self.fs = fs
         self.vol = 0  #  dB, relative to other drums
@@ -72,6 +72,7 @@ class Drum:
             input.pop(0)
             self.label = self.instrument_name.lower() + "_" + "_".join(input) \
                 + ("_brush" if self.brush else "")
+            # Convert parameters that look like numbers to float type:
             for k in range(len(input)):
                 try:
                     input[k] = float(input[k])
@@ -174,9 +175,11 @@ class Drum:
             return None
 
     def write_audio_to_file(self,path,wavdat):
+        # This stores the sound of a single drum for later re-use. (See also
+        # Sequence.export_wav, which writes the whole tune as audio.)
         wav.write(path, int(self.fs), wavdat)
 
-# The nex two objects are the two types of thing that are stored in a sequence
+# The next two objects are the two types of thing that are stored in a sequence
 # in the Sequence object. The idea is that a tune or part thereof is an
 # initial TempoSetting, followed by a number of TabSections with, possibly,
 # additional TempoSettings interspersed (to speed up or slow down the tempo).
@@ -235,10 +238,15 @@ class Sequence:
                 fid.write(grid[j][col_count*(numblocks-1):]+"\n")
 
     def export_wav(self, file_name, the_parser):
+        self.export_wav_or_mid(file_name, the_parser, "wav")
+
+    def export_mid(self, file_name, the_parser):
+        self.export_wav_or_mid(file_name, the_parser, "mid")
+
+    def export_wav_or_mid(self, file_name, the_parser, wav_or_mid):
         # Note, we're passing in a reference to the parser too, since it knows
         # the instrument definitions, the sample rate, et cetera.
-        drums = [Drum(input, the_parser.user_defined_drums,
-            the_parser.sound_folder, the_parser.fs)
+        drums = [Drum(input, the_parser.sound_folder, the_parser.fs)
             for input in the_parser.tab_lines]
         if any(len(tabsec.grid) != len(drums) for tabsec in self.seqels if
             isinstance(tabsec, TabSection)):
@@ -279,25 +287,47 @@ class Sequence:
                         offset += 1
                 time += offset*60/tempo
 
-        # Now start with a zero vector and add in each sound. We'll actually
-        # work backwards through the list we've just built, as a heuristic,
-        # because it's not easy to know in advance exactly how long the sound
-        # vector needs to be. This way, we can resize as necessary to fit each
-        # note, but will probably only need to do it a few times.
-        wavmix = np.array([])  #  0-length, 1-D vector of float64s
-        for (instr, nomvol, tempo, time) in reversed(note_list):
-            if time<0: time=0
-            startsamp = int(time*the_parser.fs)
-            wavdat = drums[instr].get_audio(tempo,
-                rng.integers(the_parser.rand_timbre))
-            if (overshoot := startsamp+len(wavdat)-len(wavmix)) > 0:
-                wavmix = np.concatenate((wavmix, np.zeros(overshoot)))
-            finalvol = 2*nomvol + drums[instr].vol + \
-                the_parser.rand_vol*rng.standard_normal()
-            wavmix[startsamp:startsamp+len(wavdat)] += \
-                wavdat * np.power(10, 0.1*finalvol)
-        wav.write(file_name, int(the_parser.fs),
-            (wavmix*32767/np.max(np.abs(wavmix))).astype(np.int16))
+        if wav_or_mid == "wav":
+            # Start with a zero vector and add in each sound. We'll actually
+            # work backwards through the list we've just built, as a heuristic,
+            # because it's not easy to know in advance exactly how long the
+            # sound vector needs to be. This way, we can resize as necessary to
+            # fit each note, but will probably only need to do it a few times.
+            wavmix = np.array([])  #  0-length, 1-D vector of float64s
+            for (instr, nomvol, tempo, time) in reversed(note_list):
+                if time<0: time=0
+                startsamp = int(time*the_parser.fs)
+                wavdat = drums[instr].get_audio(tempo,
+                    rng.integers(the_parser.rand_timbre))
+                if (overshoot := startsamp+len(wavdat)-len(wavmix)) > 0:
+                    wavmix = np.concatenate((wavmix, np.zeros(overshoot)))
+                finalvol = 2*nomvol + drums[instr].vol + \
+                    the_parser.rand_vol*rng.standard_normal()
+                wavmix[startsamp:startsamp+len(wavdat)] += \
+                    wavdat * np.power(10, 0.1*finalvol)
+            wav.write(file_name, int(the_parser.fs),
+                (wavmix*32767/np.max(np.abs(wavmix))).astype(np.int16))
+        else:  #  export MIDI instead
+            # According to
+            # https://www.hedsound.com/p/midi-velocity-db-dynamics-db-and.html,
+            # volume in dB is equal to 40*log10(MIDIVelocity/127).
+
+            # Here, the volume digit d (1--9) maps to a MIDI "velocity" of
+            # 8--120, via 14*d-6. These can then be modified by random
+            # variation and vol modifiers. Anything ending up outside the range
+            # 1--127 is clipped to that range. For simplicity, each 'decibel'
+            # of modification corresponds to a velocity change of 2 (though
+            # that doesn't strictly agree with the wav output, assuming MIDI is
+            # implemented according to the hedsound info).
+
+            # Use drums[instr].dur, drums[instr].abs_dur and tempo to calculate
+            # note duration.
+            notes = [(drums[j].param_dict.get('midi',41),
+                max(1,min(127,int(14*v+7*(drums[j].vol+
+                the_parser.rand_vol*rng.standard_normal())-6))), s,
+                drums[j].dur*(1 if drums[j].abs_dur else 60/t))
+                for (j,v,t,s) in note_list]
+            write_smf0(notes, file_name)
 
 class AbomLexer(Lexer):
     tokens = {TABLINES, TAB, SEQUENCE, REPEAT, RELATIVETEMPO, NUMBER, LPAR,
@@ -378,8 +408,7 @@ class AbomParser(Parser):
     tokens = AbomLexer.tokens
     # debugfile = 'pardump.txt'
 
-    def __init__(self, user_defined_drums):
-        self.user_defined_drums = user_defined_drums
+    def __init__(self):
         self.seq_dict = {}  #  dictionary of sections & their names
         self.sound_folder = "./Sounds"
         self.fs = 44100.0  #  sampling frequency in Hz
@@ -436,23 +465,29 @@ class AbomParser(Parser):
             self.seq_dict[p.PATHORID0].export_txt(p.PATHORID1,p.NUMBER)
             print(f"Exporting compiled tablature to file '{p.PATHORID1}'.")
         else:
-            raise ValueError("The export command has two valid uses:\n" +
-                "export PREVIOUSLY_DEFINED_SEQEUNCE FILE_NAME.txt " +
-                "POSITIVE_COLUMN_COUNT\nexport PREVIOUSLY_DEFINED_SEQEUNCE " +
-                "FILE_NAME.wav")
+            raise ValueError("The export command has three valid uses:\n" +
+                "export PREVIOUSLY_DEFINED_SEQUENCE FILE_NAME.txt " +
+                "POSITIVE_COLUMN_COUNT\nexport PREVIOUSLY_DEFINED_SEQUENCE " +
+                "FILE_NAME.wav\nexport PREVIOUSLY_DEFINED_SEQUENCE " +
+                "FILE_NAME.mid")
 
     @_('EXPORT PATHORID PATHORID')
     def statement(self, p):
         if p.PATHORID0 in self.seq_dict and len(p.PATHORID1)>4 and \
-            p.PATHORID1[-4:]==".wav":
-            print("Generating audio...")
-            self.seq_dict[p.PATHORID0].export_wav(p.PATHORID1,self)
-            print(f"Audio exported to file '{p.PATHORID1}'.")
+            p.PATHORID1[-4:] in {".wav", ".mid"}:
+            if p.PATHORID1[-3:]=="wav":
+                print("Generating audio...")
+                self.seq_dict[p.PATHORID0].export_wav(p.PATHORID1,self)
+                print(f"Audio exported to file '{p.PATHORID1}'.")
+            else:
+                self.seq_dict[p.PATHORID0].export_mid(p.PATHORID1,self)
+                print(f"MIDI exported to file '{p.PATHORID1}'.")
         else:
-            raise ValueError("The export command has two valid uses:\n" +
+            raise ValueError("The export command has three valid uses:\n" +
                 "export PREVIOUSLY_DEFINED_SEQEUNCE FILE_NAME.txt " +
                 "POSITIVE_COLUMN_COUNT\nexport PREVIOUSLY_DEFINED_SEQEUNCE " +
-                "FILE_NAME.wav")
+                "FILE_NAME.wav\nexport PREVIOUSLY_DEFINED_SEQEUNCE " +
+                "FILE_NAME.mid")
 
     @_('statement statement')
     def statement(self, p):
@@ -554,7 +589,8 @@ def note(dur,    #  note duration in seconds
     open=lambda k:0,  #  func mapping k to exponent for extra power-law attack
     close=lambda k:0.01,  #  similar to 'open' but for decay
     brush=False, #  whether to hit with a brush instead of a stick
-    fs=44100):   #  sampling frequency in Hz
+    fs=44100,    #  sampling frequency in Hz
+    **kwargs):   #  in case there are any surplus args (e.g., midi)
     L = int(dur*fs)  #  length of required sample
     sigmaFactor = np.sqrt(1.25/(np.max((sharpness,0.1))*np.log(10)))
     wave = sum((
@@ -582,7 +618,8 @@ def abominable_crash(fund_freq=230):
         'sharpness':8,
         'ap':1e-5,
         'decay':lambda k:7+0.003*k,
-        'peak':lambda k: rng.random()**3*(1+2.5/(k+1))}
+        'peak':lambda k: rng.random()**3*(1+2.5/(k+1)),
+        'midi':49}
 
 def abominable_wash(fund_freq=230):
     return {'freqs':lambda k:fund_freq*(1+k/3),
@@ -595,14 +632,16 @@ def abominable_tambourine(fund_freq=4500,sharpness=12):
     return {'freqs':lambda k: fund_freq + (50*k if k<220 else np.inf),
         'sharpness':sharpness,
         'a0':0.02,
-        'peak':lambda k:rng.random()**3*np.exp(-(np.abs(k-110)-60)**2/2000)}
+        'peak':lambda k:rng.random()**3*np.exp(-(np.abs(k-110)-60)**2/2000),
+        'midi':54}
 
 def abominable_ride(fund_freq=50):
     return {'freqs':freqs_metallic(fund_freq),
         'sharpness':8,
         'ap':1e-5,
         'decay':lambda k:5+0.01*k,
-        'peak':lambda k:rng.random()**3*(1-10/(k+20))}
+        'peak':lambda k:rng.random()**3*(1-10/(k+20)),
+        'midi':51}
 
 def abominable_hihat(clopen="closed",fund_freq=3600):
     return {'freqs':lambda k:fund_freq*(1+0.04*k),
@@ -611,7 +650,8 @@ def abominable_hihat(clopen="closed",fund_freq=3600):
         'decay':lambda k:8,
         'peak':lambda k:rng.random()**2,
         'close':((lambda k:0.01) if clopen=="open" else
-        (lambda k:0.05+k*0.016))}
+        (lambda k:0.05+k*0.016)),
+        'midi':42}
 
 def abominable_snare(fund_freq=180):
     return {'freqs':freqs_circular(fund_freq),
@@ -619,14 +659,16 @@ def abominable_snare(fund_freq=180):
         'ap':0.00015,
         'decay':lambda k:np.interp(k,
         [0,5,7,28,32,40,48],[60,80,100,100,75,75,100]),
-        'peak':lambda k:rng.random()**2+5/(k+1)**2}
+        'peak':lambda k:rng.random()**2+5/(k+1)**2,
+        'midi':38}
 
 def abominable_tom(fund_freq=180):
     return {'freqs':freqs_circular(fund_freq),
         'sharpness':8,
         'a0':0.002,
         'decay':lambda k:np.min((90+0.02*k, 22+4*k)),
-        'peak':lambda k:0.96**k*np.exp(0.5*np.cos(2*np.pi*(k-1)/7))}
+        'peak':lambda k:0.96**k*np.exp(0.5*np.cos(2*np.pi*(k-1)/7)),
+        'midi':47}
 
 def abominable_plane(fund_freq=180, sharpness=8):
     return {'freqs':freqs_circular(fund_freq),
@@ -639,19 +681,22 @@ def abominable_bass(fund_freq=20):
     return {'freqs':freqs_circular(fund_freq),
         'sharpness':5,
         'decay':lambda k:np.min((375, 24+8*k)),
-        'peak':lambda k:0.98**k}
+        'peak':lambda k:0.98**k,
+        'midi':35}
 
 def abominable_sticks(fund_freq=100):
     return {'freqs':lambda k:fund_freq*((k+1)+3/(k+10)*rng.standard_normal()),
         'sharpness':5,
         'decay':lambda k:110-24*np.cos(2*np.pi*k/10),
-        'peak':lambda k:rng.random()**0.3*k/(240+k)}
+        'peak':lambda k:rng.random()**0.3*k/(240+k),
+        'midi':31}
 
 def abominable_clave(fund_freq=1220):
     return {'freqs':freqs_metallic(fund_freq),
         'sharpness':25,
         'decay':lambda k:200,
-        'peak':lambda k:rng.random()+(12 if k<1 else 0)}
+        'peak':lambda k:rng.random()+(12 if k<1 else 0),
+        'midi':75}
 
 def abominable_fibre():
     return {'freqs':freqs_circular(1200),
@@ -663,14 +708,24 @@ def abominable_triangle(fund_freq=460):
     return {'freqs':freqs_circular(fund_freq),
         'sharpness':3e9,
         'decay':lambda k:5+0.1*k,
-        'peak':lambda k:np.exp(-0.001*(k-12)**2)}
+        'peak':lambda k:np.exp(-0.001*(k-12)**2),
+        'midi':81}
 
 def abominable_cowbell(fund_freq=700):
     return {'freqs':lambda k:fundfreq*(1+0.25*k),
         'sharpness':170,
         'decay':lambda k:100+k,
         'peak':lambda k:rng.random()*(
-        12 if k<1 else 4 if k in [4,8] else 2 if k%4==0 else 1)}
+        12 if k<1 else 4 if k in [4,8] else 2 if k%4==0 else 1),
+        'midi':56}
+
+def abominable_midi(code):
+    # This should only be used for MIDI export, so the freqs and sharpness
+    # parameters are immaterial, but we need to supply them, since they're the
+    # note parameters that have no defaults.
+    return {'freqs':freqs_circular(180),
+        'sharpness':8,
+        'midi':code}
 
 drum_dict = {
   "crash":abominable_crash,
@@ -686,20 +741,78 @@ drum_dict = {
   "clave":abominable_clave,
   "fibre":abominable_fibre,
   "triangle":abominable_triangle,
-  "cowbell":abominable_cowbell}
+  "cowbell":abominable_cowbell,
+  "midi":abominable_midi}
+
+##  MIDI DRUM TRACK OUTPUT FUNCTIONS  #########################################
+
+def write_smf0(notes, filename):
+    # Write a "Standard MIDI File" of "Type 0."
+    # Each note in notes is a (pitch,volume,start,duration) tuple.
+
+    # Set tempo to default to 500000 microseconds per 'crotchet':
+    databytes = [0, 255, 81, 3] + encode_int(500000,3)
+
+    # Set up the list of note-on and note-off events. Drums are all on "Channel
+    # 10" (1-indexed!), so the commands are 144+9=153 for note on and 128+9=137
+    # for note off. Also, the note-off velocities are all 4; this usually makes
+    # no difference, & is a value I found in a MIDI file I saw somewhere once.
+    events = np.array([[s*10000,153,p,v] for (p,v,s,d) in notes]
+        + [[(s+d)*10000,137,p,4] for (p,v,s,d) in notes], dtype=int)
+    events = events[events[:,0].argsort()]  #  sort by event time
+
+    # Now we need to delete any note-off events that were intended to switch
+    # off notes after which other notes have already switched on (on the same
+    # "pitch," i.e., drum). That is, if I have two notes on the crash cymbal,
+    # each nominally 2 seconds long, but actually only 1.5 seconds apart, then
+    # the current event table will list note-on events at t=0 and 1.5, and
+    # note-off events at t=2 and 3.5, but we want to NOT SEND the note-off at
+    # t=2, since that would prematurely kill the SECOND crash note.
+    to_remove = np.full(events.shape[0], False)
+    for (k,p) in enumerate(events[:,2]):
+        to_remove[k] = (events[k,1]==137) and \
+            (np.sum(np.logical_and(events[:k+1,1]==153,events[:k+1,2]==p)) >
+            np.sum(np.logical_and(events[:k+1,1]==137,events[:k+1,2]==p)))
+    events = events[~to_remove,:]
+
+    databytes += [byte for (deltaT, event) in
+        zip(np.diff(np.concatenate(([0],events[:,0]))), events[:,1:])
+        for byte in encode_var_length(deltaT)+event.tolist()]
+
+    databytes += [0, 255, 47, 0]  #  end of track
+
+    with open(filename, "wb") as fid:
+        # Header chunk:
+        fid.write(bytes([77,84,104,100,0,0,0,6,0,0,0,1] + encode_int(5000,2)))
+        # Track chunk:
+        fid.write(bytes([77,84,114,107] + encode_int(len(databytes),4) +
+            databytes))
+
+def encode_int(n,b):
+    # MIDI sometimes requires numeric encodings of fixed length (2 or 4)
+    return list((n).to_bytes(b,'big'))
+
+def encode_var_length(n):
+    # returns MIDI-specific variable-byte-length encoding of n
+    return list(var_len_iterator(n))
+
+def var_len_iterator(inp, continuing_flag=None):
+  if inp>127:
+    yield from var_len_iterator(inp>>7,1)
+  yield (0 if (continuing_flag is None) else 128) + (inp & 127)
 
 ##  "USER INTERFACE"  #########################################################
 
-def parse_script(file_name, user_defined_drums={}):
+def parse_script(file_name):
     lexer = AbomLexer()
-    parser = AbomParser(user_defined_drums)
+    parser = AbomParser()
     with open(file_name, "r") as fid:
         script = fid.read()
     parser.parse(lexer.tokenize(script))
 
-def parse_string(ab_code, user_defined_drums={}):
+def parse_string(ab_code):
     lexer = AbomLexer()
-    parser = AbomParser(user_defined_drums)
+    parser = AbomParser()
     parser.parse(lexer.tokenize(ab_code))
 
 def main():
@@ -714,25 +827,14 @@ if __name__ == '__main__':
 
 ##  TO-DO LIST  ###############################################################
 """
-Check how to incorporate user-written drums
-  First idea isn't working. Next idea: try passing a list or dictionary of user
-  "abominable_" functions into a function in the module, & then see what they
-  look like (e.g., what they're called) in there.
-
-  Class to generate a new instrument, and then parse_string has an optional 2nd
-  argument for user-defined drums? For flexibility, parse_script should have
-  the same optional 2nd argument.
-  Any way to define drums in the script? Not without exec ....
 Comment the code more thoroughly
 reduce imports?
-PyInstaller
+PyInstaller? Result seems very bloated.
 Deal with FOSS stuff:
   licenses (for this & sly &c.)
-    MIT license: https://choosealicense.com/licenses/mit/
     sly license: https://github.com/dabeaz/sly/blob/master/LICENSE
-  github
 Document this for users:
-  how to user the PyInstaller version
+  how to user any possible PyInstaller version
   how to write and compile your script
   how to write your own drums in Python
   how to help develop the project (code quality, UI, sounds, functionality)
@@ -740,7 +842,7 @@ seek help:
   Use the appropriate exceptions
   Resolve the "shift/reduce conflicts"
 MusicXML output?
-Multiple versions of each sound?
+MIDI output?
 Swing?
 Added to pip?
 """

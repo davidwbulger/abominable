@@ -1,0 +1,19 @@
+# A repeat of Demo 1, but for MIDI.
+
+# Firstly, list the instruments to be used:
+tablines =
+midi 12 49        #  crash cymbal, duration = whole bar
+midi 0.04s 42     #  42=hihat, duration = 0.2 seconds
+midi 3 38         #  38=snare, duration = 3 tablature columns
+midi 3 35         #  35=bass, duration = 3 tablature columns
+
+tab intro =
+---|4-----------|------------|------------|------------|------------|------------|------------|------------|
+---|3-33-33-33-3|3-33-33-33-3|3-33-33-33-3|3-33-33-33-3|3-33-33-33-3|3-33-33-33-3|3-33-33-33-3|3-33-33-33-3|
+54-|------5-----|------5---3-|------5-----|------5---3-|------5-----|------5---3-|------5-----|------5---3-|
+--3|5----5---5--|--5--------5|5----5---5--|--5--------5|5----5---5--|--5--------5|5----5---5--|--5--------5|
+
+tempo 514
+
+# Now you can export the audio as a .mid file:
+export intro RosannaShuffle.mid
